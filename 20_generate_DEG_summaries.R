@@ -1,0 +1,566 @@
+#-------------------------------------------------------------------------------
+# Author: David Prince
+# Project: NER0008751 (Obj1) 
+# Analysis: mRNA-seq
+# Subsection: Differential expression analysis.
+# Tasks: Produce a summary of each differential expression analysis consisting 
+# of a MA plot and a summary table, plus a figure of all MA plots.
+#-------------------------------------------------------------------------------
+# Inputs:
+# Bter_v1_transcripts2genes.txt file, Kallisto abundances, virus_samples.csv
+
+# Outputs:
+# PDF figure of MA plot and summary table of DEGs at different log-fold 
+# changes (LFCs) for each comparison. .svg file of the 15 MA plots together.
+#-------------------------------------------------------------------------------
+
+# LOADING PACKAGES ----
+
+library(tidyr)  # replace_na().
+library(ggplot2)  # ggplot(), ggsave().
+library(ggpubr)  # ggtexttable(), ggarrange(), annotate_figure().
+# DESeq2 and tximport loaded via the scripts in the 
+# "Custom functions" section.
+
+# LOAD DATA ----
+# NOTE: This script assumes that the working directory is the 01_scripts 
+# subdirectory.
+
+# Transcript to Gene File ----
+
+setwd("../00_data/10_transcripts2genes")
+
+t2g <- read.table(file = "Bter_v1_transcripts2genes.txt",
+                  header = FALSE,
+                  col.names = c("TXNAME",
+                                "GENEID"))
+
+# Virus Samples ----
+
+setwd("../11_virus_samples")
+
+virus_samples <- read.csv(file = "virus_samples.csv",
+                          col.names = c("sample", "virus"))
+
+# LOAD CUSTOM FUNCTIONS ----
+
+setwd("../../01_scripts")
+
+source("f_BuildDDSForDEAnalysis.R")
+
+# FUNCTION DEFINITIONS ----
+
+GenerateDEGSummary <- function (x, y, z, a = "all_samples") {
+  # Generates summary statistics for the number of statistically significant
+  # differentially expressed genes (DEGs) for a given tissue and combination of
+  # treatments and time-points.
+  #
+  # Args:
+  #   x: string denoting which tissue is to be analysed ("brain", "fatbody" 
+  #      or "ovaries").
+  #   y: string denoting the name of first treatment/time-point (chronologically)
+  #      to be compared ("R_TP1G", "R_TP2G" or "C_TP1G").
+  #   z: string denoting the name of second treatment/time-point (chronologically)
+  #      to be compared ("R_TP2G", "C_TP1G" or "C_TP2G").
+  #   a: string denoting which set of samples should be analysed ("with_virus", 
+  #      "no_virus" or "all_samples" (default)).
+  #
+  # Returns:
+  #   Character vector summarising the results for a given tissue and treatment/
+  #   time-point combination.
+  
+  # Set dds based on argument x.
+  
+  if (x == "brain") {
+    ddsName <- "ddsBrain"
+  } else if (x == "fatbody") {
+    ddsName <- "ddsFatBody"
+  } else if (x == "ovaries") {
+    ddsName <- "ddsOvaries"
+  } else {
+    stop('Argument x must be "brain", "fatbody" or "ovaries".')
+  }
+  
+  if (a == "all_samples") {
+    samplesName <- "AllSamples"
+  } else if (a == "no_virus") {
+    samplesName <- "NoVirus"
+  } else if (a == "with_virus") {
+    samplesName <- "WithVirus"
+  } else {
+    stop('Argument a must be "with_virus", "no_virus" or "all_samples" (default).')
+  }
+  
+  dds <- eval(parse(text = paste0(ddsName, samplesName)))
+  
+  # Extract results for LFC > 0.
+  
+  extractedResultsLFC0 <- results(dds, contrast = c("condition", z, y),
+                              alpha = 0.05, lfcThreshold = 0)
+  
+  # Extract results for LFC > 1.
+  
+  extractedResultsLFC1 <- results(dds, contrast = c("condition", z, y),
+                                  alpha = 0.05, lfcThreshold = 1)
+  
+  # Generate summary object.
+  
+  resultsSummary <- capture.output(c(summary(extractedResultsLFC0)),
+                                   summary(extractedResultsLFC1))
+  
+  # Format resultsSummary for improved readability.
+  
+  resultsSummary <- resultsSummary[c(2:5, 16:17)]
+  
+  # Generate description of results extracted.
+  
+  resultsDescription <- 
+    paste0("Results for: tissue = ", x, ", comparison = ", z, " vs. ", y, ".")
+  
+  # Combine description and results
+  
+  resultsToReturn <- c(resultsDescription, resultsSummary)
+  
+  # Return summary.
+  
+  return(resultsToReturn)
+  
+}
+
+MakeMAPlot <- function(x, y, z, a = "all_samples") {
+  # Generates a MA plot for DEGs from a given tissue/treatment/time-point
+  # combination.
+  #
+  # Args:
+  #   x: string denoting which tissue is to be analysed ("brain", "fatbody" 
+  #      or "ovaries").
+  #   y: string denoting the name of first treatment/time-point (chronologically)
+  #      to be compared ("R_TP1G", "R_TP2G" or "C_TP1G").
+  #   z: string denoting the name of second treatment/time-point (chronologically)
+  #      to be compared ("R_TP2G", "C_TP1G" or "C_TP2G").
+  #   a: string denoting which set of samples should be analysed ("with_virus", 
+  #      "no_virus" or "all_samples" (default)).
+  #
+  # Returns:
+  #   A MA plot generated by ggplot2.
+  
+  # Assign variables based on arguments.
+  
+  if (x == "brain") {
+    ddsName <- "ddsBrain"
+    graphYLim <- c(-5, 5)
+  } else if (x == "fatbody") {
+    ddsName <- "ddsFatBody"
+    graphYLim <- c(-6, 6)
+  } else if (x == "ovaries") {
+    ddsName <- "ddsOvaries"
+    graphYLim <- c(-7.5, 7.5)
+  } else {
+    stop('Argument x must be "brain", "fatbody" or "ovaries".')
+  }
+  
+  if (a == "all_samples") {
+    samplesName <- "AllSamples"
+  } else if (a == "no_virus") {
+    samplesName <- "NoVirus"
+  } else if (a == "with_virus") {
+    samplesName <- "WithVirus"
+  } else {
+    stop('Argument a must be "with_virus", "no_virus" or "all_samples" (default).')
+  }
+  
+  dds <- eval(parse(text = paste0(ddsName, samplesName)))
+  
+  # LFC shrink.
+  
+  resLFCShrink <- lfcShrink(dds, contrast = c("condition", z, y), type = "ashr")
+  
+  # Make data.frame.
+  
+  res_df <- as.data.frame(resLFCShrink)
+  
+  # Add significance column.
+  
+  res_df <- dplyr::mutate(res_df, significant = res_df$padj < 0.05)
+  
+  # Convert significance column to character rather than logical.
+  
+  res_df$significant <- as.character(res_df$significant)
+  
+  # Change NAs in significance column to "FALSE".
+  
+  res_df$significant <- replace_na(res_df$significant, "FALSE")
+  
+  # Produce MA plot.
+  
+  maPlot <- ggplot(res_df, aes(x = log2(baseMean), y = log2FoldChange, 
+                               colour = significant)) +
+    geom_point(size = 0.85, shape = 19) +  # Controls the point size and shape.
+    scale_colour_brewer(palette = "Set1") +  # Controls colours.
+    ylim(graphYLim) +  # Controls size of y-axis.
+    theme_bw()
+  
+  # Return MA plot.
+  
+  return(maPlot)
+  
+}
+
+MakeFigure <- function(x, y = "all_samples") {
+  # Produces a figure consisting of five MA plots and five differential expression
+  # summaries for the stated tissue.
+  #
+  # Args:
+  #   x: string denoting which tissue is to be used ("brain", "fatbody" 
+  #      or "ovaries").
+  #   y: string denoting which set of samples should be analysed ("with_virus", 
+  #      "no_virus" or "all_samples" (default)).
+  #
+  # Returns:
+  #   A ggplot figure arranged by ggpubr consisting of up to 10 subplots; 
+  #   up to 5 MA plots and up to 5 tables summarising numbers of DEGs 
+  #   (one for each of the comparisons).
+  
+  # Assign variables based on arguments.
+  
+  if (x == "fatbody") {
+    tissue <- "fatBody"
+  } else {
+    tissue <- x
+  }
+  
+  if (y == "all_samples") {
+    maRTP1GvsRTP2G <- eval(parse(text = paste0(tissue, "RTP1GvsRTP2GAllSamplesMA")))
+    maRTP1GvsCTP1G <- eval(parse(text = paste0(tissue, "RTP1GvsCTP1GAllSamplesMA")))
+    maRTP2GvsCTP1G <- eval(parse(text = paste0(tissue, "RTP2GvsCTP1GAllSamplesMA")))
+    maRTP2GvsCTP2G <- eval(parse(text = paste0(tissue, "RTP2GvsCTP2GAllSamplesMA")))
+    maCTP1GvsCTP2G <- eval(parse(text = paste0(tissue, "CTP1GvsCTP2GAllSamplesMA")))
+    sumRTP1GvsRTP2G <- ggtexttable(eval(parse(text = paste0(tissue, "RTP1GvsRTP2GAllSamplesSum"))))
+    sumRTP1GvsCTP1G <- ggtexttable(eval(parse(text = paste0(tissue, "RTP1GvsCTP1GAllSamplesSum"))))
+    sumRTP2GvsCTP1G <- ggtexttable(eval(parse(text = paste0(tissue, "RTP2GvsCTP1GAllSamplesSum"))))
+    sumRTP2GvsCTP2G <- ggtexttable(eval(parse(text = paste0(tissue, "RTP2GvsCTP2GAllSamplesSum"))))
+    sumCTP1GvsCTP2G <- ggtexttable(eval(parse(text = paste0(tissue, "CTP1GvsCTP2GAllSamplesSum"))))
+  } else if (y == "no_virus") {
+    maRTP1GvsRTP2G <- eval(parse(text = paste0(tissue, "RTP1GvsRTP2GNoVirusMA")))
+    maRTP2GvsCTP2G <- eval(parse(text = paste0(tissue, "RTP2GvsCTP2GNoVirusMA")))
+    sumRTP1GvsRTP2G <- ggtexttable(eval(parse(text = paste0(tissue, "RTP1GvsRTP2GNoVirusSum"))))
+    sumRTP2GvsCTP2G <- ggtexttable(eval(parse(text = paste0(tissue, "RTP2GvsCTP2GNoVirusSum"))))
+  } else if (y == "with_virus") {
+    maRTP2GvsCTP2G <- eval(parse(text = paste0(tissue, "RTP2GvsCTP2GWithVirusMA")))
+    sumRTP2GvsCTP2G <- ggtexttable(eval(parse(text = paste0(tissue, "RTP2GvsCTP2GWithVirusSum"))))
+  } else {
+    stop('Argument a must be "with_virus", "no_virus" or "all_samples" (default).')
+  }
+  
+  #  Combine text and graph.
+  
+  if (y == "all_samples") {
+    newPlot <- ggarrange(maRTP1GvsRTP2G, sumRTP1GvsRTP2G,
+                         maRTP1GvsCTP1G, sumRTP1GvsCTP1G,
+                         maRTP2GvsCTP1G, sumRTP2GvsCTP1G,
+                         maRTP2GvsCTP2G, sumRTP2GvsCTP2G,
+                         maCTP1GvsCTP2G, sumCTP1GvsCTP2G,
+                         labels = c("a", "b", "c", "d", "e", "f", "g", "h", "i", "j"), 
+                         ncol = 2, nrow = 5)
+  } else if (y == "no_virus") {
+    newPlot <- ggarrange(maRTP1GvsRTP2G, sumRTP1GvsRTP2G,
+                         maRTP2GvsCTP2G, sumRTP2GvsCTP2G,
+                         labels = c("a", "b", "c", "d"), 
+                         ncol = 2, nrow = 2)
+  } else if (y == "with_virus") {
+    newPlot <- ggarrange(maRTP2GvsCTP2G, sumRTP2GvsCTP2G, 
+                         labels = c("a", "b"),
+                         ncol = 2, nrow = 1)
+  }
+  
+  figure <- annotate_figure(newPlot,
+                            top = x)
+  
+  # Return figure.
+  
+  return(figure)
+  
+}
+
+# EXECUTED STATEMENTS ----
+
+# Build dds Objects for Each Tissue ----
+
+# Brain.
+
+ddsBrainAllSamples <- BuildDDSForDEAnalysis("brain")
+
+ddsBrainNoVirus <- BuildDDSForDEAnalysis("brain", y = "no_virus")
+
+ddsBrainWithVirus <- BuildDDSForDEAnalysis("brain", y = "with_virus")
+
+# Fat body.
+
+ddsFatBodyAllSamples <- BuildDDSForDEAnalysis("fatbody")
+
+ddsFatBodyNoVirus <- BuildDDSForDEAnalysis("fatbody", y = "no_virus")
+
+# Ovaries.
+
+ddsOvariesAllSamples <- BuildDDSForDEAnalysis("ovaries")
+
+ddsOvariesNoVirus <- BuildDDSForDEAnalysis("ovaries", y = "no_virus")
+
+ddsOvariesWithVirus <- BuildDDSForDEAnalysis("ovaries", y = "with_virus")
+
+# Generate Summaries of Differential Expression Analysis ----
+
+# Brain, all samples.
+
+brainRTP1GvsRTP2GAllSamplesSum <- GenerateDEGSummary("brain", "R_TP1G", "R_TP2G")
+
+brainRTP1GvsCTP1GAllSamplesSum <- GenerateDEGSummary("brain", "R_TP1G", "C_TP1G")
+
+brainRTP2GvsCTP1GAllSamplesSum <- GenerateDEGSummary("brain", "R_TP2G", "C_TP1G")
+
+brainRTP2GvsCTP2GAllSamplesSum <- GenerateDEGSummary("brain", "R_TP2G", "C_TP2G")
+
+brainCTP1GvsCTP2GAllSamplesSum <- GenerateDEGSummary("brain", "C_TP1G", "C_TP2G")
+
+# Brain, no virus.
+
+brainRTP1GvsRTP2GNoVirusSum <- GenerateDEGSummary("brain", "R_TP1G", "R_TP2G", a = "no_virus")
+
+# "brain", "R_TP1G", "C_TP1G", a = "no_virus" -> too few biological replicates in C_TP1G.
+
+# "brain", "R_TP2G", "C_TP1G", a = "no_virus" -> too few biological replicates in C_TP1G.
+
+brainRTP2GvsCTP2GNoVirusSum <- GenerateDEGSummary("brain", "R_TP2G", "C_TP2G", a = "no_virus")
+
+# "brain", "C_TP1G", "C_TP2G", a = "no_virus" -> too few biological replicates in C_TP1G.
+
+# Brain, with virus.
+
+brainRTP2GvsCTP2GWithVirusSum <- GenerateDEGSummary("brain", "R_TP2G", "C_TP2G", a = "with_virus")
+
+# Fat body, all samples.
+
+fatBodyRTP1GvsRTP2GAllSamplesSum <- GenerateDEGSummary("fatbody", "R_TP1G", "R_TP2G")
+
+fatBodyRTP1GvsCTP1GAllSamplesSum <- GenerateDEGSummary("fatbody", "R_TP1G", "C_TP1G")
+
+fatBodyRTP2GvsCTP1GAllSamplesSum <- GenerateDEGSummary("fatbody", "R_TP2G", "C_TP1G")
+
+fatBodyRTP2GvsCTP2GAllSamplesSum <- GenerateDEGSummary("fatbody", "R_TP2G", "C_TP2G")
+
+fatBodyCTP1GvsCTP2GAllSamplesSum <- GenerateDEGSummary("fatbody", "C_TP1G", "C_TP2G")
+
+# Fat body, no virus.
+
+fatBodyRTP1GvsRTP2GNoVirusSum <- GenerateDEGSummary("fatbody", "R_TP1G", "R_TP2G", a = "no_virus")
+
+# "fatbody", "R_TP1G", "C_TP1G", a = "no_virus" -> too few biological replicates in C_TP1G.
+
+# "fatbody", "R_TP2G", "C_TP1G", a = "no_virus" -> too few biological replicates in C_TP1G.
+
+fatBodyRTP2GvsCTP2GNoVirusSum <- GenerateDEGSummary("fatbody", "R_TP2G", "C_TP2G", a = "no_virus")
+
+# "fatbody", "C_TP1G", "C_TP2G", a = "no_virus" -> too few biological replicates in C_TP1G.
+
+# Ovaries, all samples.
+
+ovariesRTP1GvsRTP2GAllSamplesSum <- GenerateDEGSummary("ovaries", "R_TP1G", "R_TP2G")
+
+ovariesRTP1GvsCTP1GAllSamplesSum <- GenerateDEGSummary("ovaries", "R_TP1G", "C_TP1G")
+
+ovariesRTP2GvsCTP1GAllSamplesSum <- GenerateDEGSummary("ovaries", "R_TP2G", "C_TP1G")
+
+ovariesRTP2GvsCTP2GAllSamplesSum <- GenerateDEGSummary("ovaries", "R_TP2G", "C_TP2G")
+
+ovariesCTP1GvsCTP2GAllSamplesSum <- GenerateDEGSummary("ovaries", "C_TP1G", "C_TP2G")
+
+# Ovaries, no virus.
+
+ovariesRTP1GvsRTP2GNoVirusSum <- GenerateDEGSummary("ovaries", "R_TP1G", "R_TP2G", a = "no_virus")
+
+# "ovaries", "R_TP1G", "C_TP1G", a = "no_virus" -> too few biological replicates in C_TP1G.
+
+# "ovaries", "R_TP2G", "C_TP1G", a = "no_virus" -> too few biological replicates in C_TP1G.
+
+ovariesRTP2GvsCTP2GNoVirusSum <- GenerateDEGSummary("ovaries", "R_TP2G", "C_TP2G", a = "no_virus")
+
+# "ovaries", "C_TP1G", "C_TP2G", a = "no_virus" -> too few biological replicates in C_TP1G.
+
+# Ovaries, with virus.
+
+ovariesRTP2GvsCTP2GWithVirusSum <- GenerateDEGSummary("ovaries", "R_TP2G", "C_TP2G", a = "with_virus")
+
+# Generate MA Plots ----
+
+# Brain, all samples.
+
+brainRTP1GvsRTP2GAllSamplesMA <- MakeMAPlot("brain", "R_TP1G", "R_TP2G")
+
+brainRTP1GvsCTP1GAllSamplesMA <- MakeMAPlot("brain", "R_TP1G", "C_TP1G")
+
+brainRTP2GvsCTP1GAllSamplesMA <- MakeMAPlot("brain", "R_TP2G", "C_TP1G")
+
+brainRTP2GvsCTP2GAllSamplesMA <- MakeMAPlot("brain", "R_TP2G", "C_TP2G")
+
+brainCTP1GvsCTP2GAllSamplesMA <- MakeMAPlot("brain", "C_TP1G", "C_TP2G")
+
+# Brain, no virus.
+
+brainRTP1GvsRTP2GNoVirusMA <- MakeMAPlot("brain", "R_TP1G", "R_TP2G", a = "no_virus")
+
+brainRTP2GvsCTP2GNoVirusMA <- MakeMAPlot("brain", "R_TP2G", "C_TP2G", a = "no_virus")
+
+# Brain, with virus.
+
+brainRTP2GvsCTP2GWithVirusMA <- MakeMAPlot("brain", "R_TP2G", "C_TP2G", a = "with_virus")
+
+# Fat body, all samples.
+
+fatBodyRTP1GvsRTP2GAllSamplesMA <- MakeMAPlot("fatbody", "R_TP1G", "R_TP2G")
+
+fatBodyRTP1GvsCTP1GAllSamplesMA <- MakeMAPlot("fatbody", "R_TP1G", "C_TP1G")
+
+fatBodyRTP2GvsCTP1GAllSamplesMA <- MakeMAPlot("fatbody", "R_TP2G", "C_TP1G")
+
+fatBodyRTP2GvsCTP2GAllSamplesMA <- MakeMAPlot("fatbody", "R_TP2G", "C_TP2G")
+
+fatBodyCTP1GvsCTP2GAllSamplesMA <- MakeMAPlot("fatbody", "C_TP1G", "C_TP2G")
+
+# Fat body, no virus.
+
+fatBodyRTP1GvsRTP2GNoVirusMA <- MakeMAPlot("fatbody", "R_TP1G", "R_TP2G", a = "no_virus")
+
+fatBodyRTP2GvsCTP2GNoVirusMA <- MakeMAPlot("fatbody", "R_TP2G", "C_TP2G", a = "no_virus")
+
+# Ovaries, all samples.
+
+ovariesRTP1GvsRTP2GAllSamplesMA <- MakeMAPlot("ovaries", "R_TP1G", "R_TP2G")
+
+ovariesRTP1GvsCTP1GAllSamplesMA <- MakeMAPlot("ovaries", "R_TP1G", "C_TP1G")
+
+ovariesRTP2GvsCTP1GAllSamplesMA <- MakeMAPlot("ovaries", "R_TP2G", "C_TP1G")
+
+ovariesRTP2GvsCTP2GAllSamplesMA <- MakeMAPlot("ovaries", "R_TP2G", "C_TP2G")
+
+ovariesCTP1GvsCTP2GAllSamplesMA <- MakeMAPlot("ovaries", "C_TP1G", "C_TP2G")
+
+# Ovaries, no virus.
+
+ovariesRTP1GvsRTP2GNoVirusMA <- MakeMAPlot("ovaries", "R_TP1G", "R_TP2G", a = "no_virus")
+
+ovariesRTP2GvsCTP2GNoVirusMA <- MakeMAPlot("ovaries", "R_TP2G", "C_TP2G", a = "no_virus")
+
+# Ovaries, with virus.
+
+ovariesRTP2GvsCTP2GWithVirusMA <- MakeMAPlot("ovaries", "R_TP2G", "C_TP2G", a = "with_virus")
+
+# Make Figures ----
+
+# Brain.
+
+brainAllSamplesFigure <- MakeFigure("brain")
+
+brainNoVirusFigure <- MakeFigure("brain", y = "no_virus")
+
+brainWithVirusFigure <- MakeFigure("brain", y = "with_virus")
+
+# Fat body.
+
+fatBodyAllSamplesFigure <- MakeFigure("fatbody")
+
+fatBodyNoVirusFigure <- MakeFigure("fatbody", y = "no_virus")
+
+# Ovaries.
+
+ovariesAllSamplesFigure <- MakeFigure("ovaries")
+
+ovariesNoVirusFigure <- MakeFigure("ovaries", y = "no_virus")
+
+ovariesWithVirusFigure <- MakeFigure("ovaries", y = "with_virus")
+
+# Combined MA plot figure.
+
+combinedMAFigure <- 
+  ggarrange(brainRTP1GvsRTP2GAllSamplesMA, brainRTP1GvsCTP1GAllSamplesMA, brainRTP2GvsCTP1GAllSamplesMA, 
+            brainRTP2GvsCTP2GAllSamplesMA, brainCTP1GvsCTP2GAllSamplesMA, fatBodyRTP1GvsRTP2GAllSamplesMA, 
+            fatBodyRTP1GvsCTP1GAllSamplesMA, fatBodyRTP2GvsCTP1GAllSamplesMA, fatBodyRTP2GvsCTP2GAllSamplesMA,
+            fatBodyCTP1GvsCTP2GAllSamplesMA, ovariesRTP1GvsRTP2GAllSamplesMA, ovariesRTP1GvsCTP1GAllSamplesMA, 
+            ovariesRTP2GvsCTP1GAllSamplesMA, ovariesRTP2GvsCTP2GAllSamplesMA, ovariesCTP1GvsCTP2GAllSamplesMA,
+            labels = c("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", 
+                       "l", "m", "n", "o"),
+            ncol = 5,
+            nrow = 3)
+
+# Save Figures ----
+
+# Brain.
+
+# Create directory.
+
+dir.create("../02_outputs/02_brain/30_DESeq2_summary_figure")
+# Will produce a warning if directory already exists.
+
+# Change directory
+
+setwd("../02_outputs/02_brain/30_DESeq2_summary_figure")
+
+# Save figures.
+
+ggsave("00_NER0008751_obj1_brain_deseq2_all_samples_summary_figure.pdf",
+       brainAllSamplesFigure, width = 21, height = 29.7, units = "cm")
+
+ggsave("01_NER0008751_obj1_brain_deseq2_no_virus_summary_figure.pdf",
+       brainNoVirusFigure, width = 21, height = 29.7, units = "cm")
+
+ggsave("02_NER0008751_obj1_brain_deseq2_with_virus_summary_figure.pdf",
+       brainWithVirusFigure, width = 21, height = 29.7, units = "cm")
+
+# Fat body.
+
+# Create directory.
+
+dir.create("../../03_fatbody/30_DESeq2_summary_figure")
+# Will produce a warning if directory already exists.
+
+# Change directory.
+
+setwd("../../03_fatbody/30_DESeq2_summary_figure")
+
+# Save figures.
+
+ggsave("00_NER0008751_obj1_fatbody_deseq2_all_samples_summary_figure.pdf",
+       fatBodyAllSamplesFigure, width = 21, height = 29.7, units = "cm")
+
+ggsave("01_NER0008751_obj1_fatbody_deseq2_no_virus_summary_figure.pdf",
+       fatBodyNoVirusFigure, width = 21, height = 29.7, units = "cm")
+
+# Ovaries.
+
+# Create directory.
+
+dir.create("../../01_ovaries/30_DESeq2_summary_figure")
+# Will produce a warning if directory already exists.
+
+# Change directory.
+
+setwd("../../01_ovaries/30_DESeq2_summary_figure")
+
+# Save figures.
+
+ggsave("00_NER0008751_obj1_ovaries_deseq2_all_samples_summary_figure.pdf",
+       ovariesAllSamplesFigure, width = 21, height = 29.7, units = "cm")
+
+ggsave("01_NER0008751_obj1_ovaries_deseq2_no_virus_summary_figure.pdf",
+       ovariesNoVirusFigure, width = 21, height = 29.7, units = "cm")
+
+ggsave("02_NER0008751_obj1_ovaries_deseq2_with_virus_summary_figure.pdf",
+       ovariesWithVirusFigure, width = 21, height = 29.7, units = "cm")
+
+# Combined MA plot figure.
+
+# Change directory.
+
+setwd("../../00_all_tissues")
+
+ggsave("20_NER0008751_obj1_fig_S15_MA_all_samples_summary_figure.svg",
+       combinedMAFigure, width = 29.7, height = 21, units = "cm")
