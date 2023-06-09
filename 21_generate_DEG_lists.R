@@ -316,7 +316,7 @@ ddsOvaries <- BuildDDSForDEAnalysis("ovaries")
 dir.create("../02_outputs/02_brain/31_DESeq2_DEG_lists")
 # Will produce a warning if directory already exists.
 
-# Change directory
+# Change directory.
 
 setwd("../02_outputs/02_brain/31_DESeq2_DEG_lists")
 
@@ -343,7 +343,7 @@ MakeGeneList("fatbody")
 
 MakeDEGLists("fatbody")
 
-# Ovaries
+# Ovaries.
 
 # Create directory.
 
