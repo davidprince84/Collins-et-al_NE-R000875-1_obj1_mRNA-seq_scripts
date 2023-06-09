@@ -82,9 +82,6 @@ fi
 kallisto quant -i ../01_fasta/Bter_v1_cDNA_index.idx -o ../../02_outputs/${NUMBER}_${1}/22_kallisto_pseudoalignment_abundances/${OUTPUT} --rf-stranded ${FILE} ${FILEHANDLE}_R2.fastq.gz 2> ../../02_outputs/${NUMBER}_${1}/23_kallisto_pseudoalignment_summaries/${OUTPUT}.txt
 done
 
-094_NER0008751_obj1_exp1_DC197_ovary_C_TP2G_rep4_L2_R1.fastq.gz
-
-
 # STEP 4: SUMMARISE PSEUDOALIGNMENTS WITH MULTIQC ----
 
 # Change Directory ----
