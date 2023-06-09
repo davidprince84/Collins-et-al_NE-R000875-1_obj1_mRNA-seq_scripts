@@ -81,7 +81,7 @@ fi
 hisat2 -x ../01_fasta/Bter_v1_HISAT2_index --summary-file ../../02_outputs/${NUMBER}_${1}/11_hisat2_alignment_summaries/${OUTPUT}_hisat2.txt --new-summary --dta -1 ${FILE} -2 ${FILEHANDLE}_R2.fastq.gz | samtools sort -o ../../02_outputs/${NUMBER}_${1}/10_hisat2_aligned_reads/${OUTPUT}_hisat2.bam
 done
 
-# STEP 2: GENERATE MULTIQC REPORT OF ALIGNMENT SUMMARIES ----
+# STEP 4: GENERATE MULTIQC REPORT OF ALIGNMENT SUMMARIES ----
 
 # Change Directory ----
 
@@ -94,7 +94,7 @@ cd ../../02_outputs/${NUMBER}_${1}/11_hisat2_alignment_summaries
 
 multiqc . -n 10_NER0008751_obj1_${1}_hisat2_multiqc.html -o ../02_quality_control_reports
 
-# STEP 3: INDEX ALIGNMENT FILES ----
+# STEP 5: INDEX ALIGNMENT FILES ----
 
 # Change Directory ----
 
