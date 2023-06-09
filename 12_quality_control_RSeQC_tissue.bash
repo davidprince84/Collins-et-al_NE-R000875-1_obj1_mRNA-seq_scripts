@@ -32,7 +32,6 @@ then
 elif [ ${1} = brain ]
 then 
 	NUMBER=02
-
 elif [ ${1} = fatbody ]
 then 
 	NUMBER=03
