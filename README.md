@@ -1,6 +1,6 @@
 # Collins-et-al_NE-R000875-1_obj1_mRNA-seq_scripts
 
-This repository contains the scripts and files needed to reproduce the analysis of, "Costs of reproduction are present but latent in eusocial bumblebee queens" by David H. Collins, David C. Prince, Jenny L. Donelan, Tracey Chapman, and Andrew F. G. Bourke, published in BMC Biology.  
+This repository contains the scripts and files needed to reproduce the analysis of, "Collins, D.H., Prince, D.C., Donelan, J.L. et al. Costs of reproduction are present but latent in eusocial bumblebee queens. BMC Biol 21, 153 (2023)." https://doi.org/10.1186/s12915-023-01648-5
 
 The csv files "aggression", "BORIS_video", "cells", "numbers", "queen_measurements", "survival" and "Virus", together with the R scripts with names starting "NER0008751_Obj1_Exp1" are needed to reproduce the "Queen fertility and colony fertility" and the "Queen longevity, worker aggression, worker additions and removals, and queen activity/response to disturbance" sections of the results. 
 
